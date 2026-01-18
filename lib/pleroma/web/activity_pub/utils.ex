@@ -103,7 +103,8 @@ defmodule Pleroma.Web.ActivityPub.Utils do
         "#{Endpoint.url()}/schemas/litepub-0.1.jsonld",
         %{
           "@language" => "und",
-          "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm"
+          "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm",
+          "indexable" => "http://joinmastodon.org/ns#indexable"
         }
       ]
     }

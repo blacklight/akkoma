@@ -103,6 +103,7 @@ defmodule Pleroma.Web.ActivityPub.UserView do
       "tag" => emoji_tags,
       # Note: key name is indeed "discoverable" (not an error)
       "discoverable" => user.is_discoverable,
+      "indexable" => user.is_discoverable,
       "capabilities" => capabilities,
       "alsoKnownAs" => user.also_known_as
     }

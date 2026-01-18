@@ -270,6 +270,8 @@ defmodule Pleroma.Web.MastodonAPI.AccountView do
       acct: user.nickname,
       display_name: display_name,
       locked: user.is_locked,
+      # Mirror is_discoverable to indexable to keep things simple for now
+      indexable: user.is_discoverable,
       created_at: Utils.to_masto_date(user.inserted_at),
       followers_count: followers_count,
       following_count: following_count,

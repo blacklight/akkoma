@@ -32,6 +32,7 @@ defmodule Pleroma.Web.ApiSpec.Schemas.Account do
       header_static: %Schema{type: :string, format: :uri},
       header: %Schema{type: :string, format: :uri},
       id: FlakeID,
+      indexable: %Schema{type: :boolean},
       locked: %Schema{type: :boolean},
       note: %Schema{type: :string, format: :html},
       statuses_count: %Schema{type: :integer},
