@@ -347,6 +347,10 @@ defmodule Pleroma.Web.ActivityPub.ActivityPub do
          %Object{} = quoted_object <- Object.get_cached_by_ap_id(quote_uri),
          quoted_author <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
          false <- quoted_author == user.ap_id do
+      object
+      |> Ecto.Changeset.change(data: Map.put(object.data, "quoteApprovalState", "pending"))
+      |> Repo.update()
+
       {:ok, quote_request_data, _} =
         Builder.quote_request(user, quoted_object, object.data["id"])
 

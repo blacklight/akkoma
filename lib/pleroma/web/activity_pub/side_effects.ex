@@ -11,6 +11,7 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   """
   alias Pleroma.Activity
   alias Pleroma.FollowingRelationship
+  alias Pleroma.QuoteAuthorization
   alias Pleroma.Notification
   alias Pleroma.Object
   alias Pleroma.Repo
@@ -357,8 +358,6 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
         } = activity,
         meta
       ) do
-    alias Pleroma.QuoteAuthorization
-
     with %Object{} = quoted_object <- Object.get_cached_by_ap_id(quoted_object_id),
          author_ap_id <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
          %User{local: true} = author <- User.get_cached_by_ap_id(author_ap_id) do

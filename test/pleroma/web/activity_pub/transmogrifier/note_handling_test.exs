@@ -890,20 +890,21 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier.NoteHandlingTest do
       refute Map.has_key?(result, "quote")
     end
 
-    test "interactionPolicy is preserved on ingested objects", _ do
-      note = %{
-        "type" => "Note",
-        "id" => "https://remote.example/objects/1",
-        "interactionPolicy" => %{
-          "canQuote" => %{
-            "automaticApproval" => ["https://www.w3.org/ns/activitystreams#Public"]
-          }
+    test "interactionPolicy is preserved through fix_quote_url", _ do
+      policy = %{
+        "canQuote" => %{
+          "automaticApproval" => ["https://www.w3.org/ns/activitystreams#Public"]
         }
       }
 
-      assert note["interactionPolicy"]["canQuote"]["automaticApproval"] == [
-               "https://www.w3.org/ns/activitystreams#Public"
-             ]
+      note = %{
+        "type" => "Note",
+        "id" => "https://remote.example/objects/1",
+        "interactionPolicy" => policy
+      }
+
+      result = Transmogrifier.fix_quote_url(note)
+      assert result["interactionPolicy"] == policy
     end
   end
 

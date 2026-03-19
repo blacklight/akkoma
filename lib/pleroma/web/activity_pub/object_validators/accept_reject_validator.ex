@@ -98,7 +98,7 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.AcceptRejectValidator do
   end
 
   defp fetch_transient_object(
-         %{"actor" => actor, "object" => _quoted, "type" => "QuoteRequest"} = object
+         %{"actor" => _actor, "object" => _quoted, "type" => "QuoteRequest"} = object
        ) do
     with %Activity{} = activity <- Activity.get_by_ap_id(object["id"]) do
       activity.data

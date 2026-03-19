@@ -8,6 +8,7 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
   """
   alias Pleroma.Activity
   alias Pleroma.EctoType.ActivityPub.ObjectValidators
+  alias Pleroma.QuoteAuthorization
   alias Pleroma.Maps
   alias Pleroma.Object
   alias Pleroma.Object.Containment
@@ -620,12 +621,11 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
          _options
        )
        when is_binary(object_id) do
-    alias Pleroma.QuoteAuthorization
-
     # Check if this is a Delete for a QuoteAuthorization
     case QuoteAuthorization.get_by_ap_id(object_id) do
-      %QuoteAuthorization{} ->
+      %QuoteAuthorization{data: qa_data} ->
         with {:ok, %User{}} <- ObjectValidator.fetch_actor(data),
+             true <- qa_data["attributedTo"] == data["actor"],
              {:ok, _} <- QuoteAuthorization.delete_by_ap_id(object_id) do
           # Strip quoteAuthorization from any object that references it
           from(o in Object,
@@ -653,47 +653,8 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
     end
   end
 
-  defp handle_incoming_delete(data) do
-    oid_result = ObjectValidators.ObjectID.cast(data["object"])
-
-    with {_, {:ok, object_id}} <- {:object_id, oid_result},
-         object <- Object.get_cached_by_ap_id(object_id),
-         {_, false} <- {:tombstone, Object.tombstone_object?(object) && !data["actor"]},
-         {:ok, activity, _} <- Pipeline.common_pipeline(data, local: false) do
-      {:ok, activity}
-    else
-      {:object_id, _} ->
-        {:error, {:validate, "Invalid object id: #{data["object"]}"}}
-
-      {:tombstone, true} ->
-        {:error, :ignore}
-
-      {:error, {:validate, {:error, %Ecto.Changeset{errors: errors}}}} = e ->
-        if errors[:object] == {"can't find object", []} do
-          # Check if we have a create activity for this
-          # (e.g. from a db prune without --prune-activities)
-          # We'd still like to process side effects so insert a fake tombstone and retry
-          # (real tombstones from Object.delete do not have an actor field)
-          with {:ok, object_id} <- ObjectValidators.ObjectID.cast(data["object"]),
-               {_, %Activity{data: %{"actor" => actor}}} <-
-                 {:create, Activity.create_by_object_ap_id(object_id) |> Repo.one()},
-               {:ok, tombstone_data, _} <- Builder.tombstone(actor, object_id),
-               {:ok, _tombstone} <- Object.create(tombstone_data) do
-            handle_incoming(data)
-          else
-            {:create, _} -> {:error, :ignore}
-            _ -> e
-          end
-        else
-          e
-        end
-
-      {:error, _} = e ->
-        e
-
-      e ->
-        {:error, e}
-    end
+  defp handle_incoming_normalised(%{"type" => "Delete"} = data, _options) do
+    handle_incoming_delete(data)
   end
 
   defp handle_incoming_normalised(
@@ -794,6 +755,49 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
   end
 
   defp handle_incoming_normalised(_, _), do: {:error, :unsupported}
+
+  defp handle_incoming_delete(data) do
+    oid_result = ObjectValidators.ObjectID.cast(data["object"])
+
+    with {_, {:ok, object_id}} <- {:object_id, oid_result},
+         object <- Object.get_cached_by_ap_id(object_id),
+         {_, false} <- {:tombstone, Object.tombstone_object?(object) && !data["actor"]},
+         {:ok, activity, _} <- Pipeline.common_pipeline(data, local: false) do
+      {:ok, activity}
+    else
+      {:object_id, _} ->
+        {:error, {:validate, "Invalid object id: #{data["object"]}"}}
+
+      {:tombstone, true} ->
+        {:error, :ignore}
+
+      {:error, {:validate, {:error, %Ecto.Changeset{errors: errors}}}} = e ->
+        if errors[:object] == {"can't find object", []} do
+          # Check if we have a create activity for this
+          # (e.g. from a db prune without --prune-activities)
+          # We'd still like to process side effects so insert a fake tombstone and retry
+          # (real tombstones from Object.delete do not have an actor field)
+          with {:ok, object_id} <- ObjectValidators.ObjectID.cast(data["object"]),
+               {_, %Activity{data: %{"actor" => actor}}} <-
+                 {:create, Activity.create_by_object_ap_id(object_id) |> Repo.one()},
+               {:ok, tombstone_data, _} <- Builder.tombstone(actor, object_id),
+               {:ok, _tombstone} <- Object.create(tombstone_data) do
+            handle_incoming(data)
+          else
+            {:create, _} -> {:error, :ignore}
+            _ -> e
+          end
+        else
+          e
+        end
+
+      {:error, _} = e ->
+        e
+
+      e ->
+        {:error, e}
+    end
+  end
 
   @spec get_obj_helper(String.t(), Keyword.t()) :: {:ok, Object.t()} | nil
   def get_obj_helper(id, options \\ []) do
