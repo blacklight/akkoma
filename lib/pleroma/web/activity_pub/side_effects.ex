@@ -702,9 +702,17 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
       {:ok, quote_request_data, _} =
         Builder.quote_request(user, quoted_object, object.data["id"])
 
-      Pipeline.common_pipeline(quote_request_data, local: true)
+      Logger.info("Sending QuoteRequest: #{inspect(quote_request_data)}")
+
+      result = Pipeline.common_pipeline(quote_request_data, local: true)
+
+      Logger.info("QuoteRequest pipeline result: #{inspect(result)}")
+
+      result
     else
-      _ -> :ok
+      e ->
+        Logger.warning("QuoteRequest skipped for #{object.data["id"]}: #{inspect(e)}")
+        :ok
     end
   end
 
