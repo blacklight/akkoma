@@ -14,7 +14,7 @@ defmodule Pleroma.QuoteAuthorization do
     field(:quoting_ap_id, :string)
     field(:data, :map)
 
-    belongs_to(:user, User, type: Ecto.UUID)
+    belongs_to(:user, User, type: FlakeId.Ecto.CompatType)
 
     timestamps()
   end
