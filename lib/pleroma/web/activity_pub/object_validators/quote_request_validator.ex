@@ -41,14 +41,25 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.QuoteRequestValidator do
   end
 
   defp validate_quoted_object_is_local(cng) do
-    with object_id when is_binary(object_id) <- get_field(cng, :object),
-         %Object{} = object <- Object.get_cached_by_ap_id(object_id),
-         %User{local: true} <- User.get_cached_by_ap_id(object.data["attributedTo"] || object.data["actor"]) do
-      cng
-    else
-      _ ->
+    actor_id = get_field(cng, :actor)
+
+    # Only enforce for incoming QuoteRequests (remote actor).
+    # Outgoing QuoteRequests (local actor) quote remote objects by definition.
+    case User.get_cached_by_ap_id(actor_id) do
+      %User{local: true} ->
         cng
-        |> add_error(:object, "quoted object is not local or does not exist")
+
+      _ ->
+        with object_id when is_binary(object_id) <- get_field(cng, :object),
+             %Object{} = object <- Object.get_cached_by_ap_id(object_id),
+             %User{local: true} <-
+               User.get_cached_by_ap_id(object.data["attributedTo"] || object.data["actor"]) do
+          cng
+        else
+          _ ->
+            cng
+            |> add_error(:object, "quoted object is not local or does not exist")
+        end
     end
   end
 
