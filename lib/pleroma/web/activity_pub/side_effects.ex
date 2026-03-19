@@ -690,11 +690,22 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   end
 
   defp maybe_send_quote_request(user, object) do
-    with quote_uri when is_binary(quote_uri) <- object.data["quoteUri"],
-         %Object{} = quoted_object <- Object.get_cached_by_ap_id(quote_uri),
+    quote_uri = object.data["quoteUri"]
+
+    if is_binary(quote_uri) do
+      do_maybe_send_quote_request(user, object, quote_uri)
+    else
+      :ok
+    end
+  end
+
+  defp do_maybe_send_quote_request(user, object, quote_uri) do
+    with %Object{} = quoted_object <- Object.get_cached_by_ap_id(quote_uri),
          %{"interactionPolicy" => %{"canQuote" => _}} <- quoted_object.data,
          quoted_author <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
          false <- quoted_author == user.ap_id do
+      Logger.info("Sending QuoteRequest for #{object.data["id"]} quoting #{quote_uri}")
+
       # Mark the quoting object as pending approval
       set_quote_approval_state(object, "pending")
 
@@ -703,7 +714,17 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
 
       Pipeline.common_pipeline(quote_request_data, local: true)
     else
-      _ -> :ok
+      e ->
+        quoted_object = Object.get_cached_by_ap_id(quote_uri)
+
+        Logger.warning(
+          "QuoteRequest not sent for #{object.data["id"]} quoting #{quote_uri}: " <>
+            "quoted_object_found=#{quoted_object != nil}, " <>
+            "interactionPolicy=#{inspect(quoted_object && quoted_object.data["interactionPolicy"])}, " <>
+            "reason=#{inspect(e)}"
+        )
+
+        :ok
     end
   end
 
