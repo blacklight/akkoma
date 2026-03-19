@@ -35,65 +35,14 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   def handle(object, meta \\ [])
 
   # Task this handles
-  # - Follows
-  # - Sends a notification
-  @impl true
-  def handle(
-        %{
-          data: %{
-            "actor" => actor,
-            "type" => "Accept",
-            "object" => follow_activity_id
-          }
-        } = object,
-        meta
-      ) do
-    with %Activity{data: %{"type" => "Follow"}} = follow_activity <-
-           Activity.get_by_ap_id(follow_activity_id),
-         %{actor: follower_id} <- follow_activity,
-         %User{} = followed <- User.get_cached_by_ap_id(actor),
-         %User{} = follower <- User.get_cached_by_ap_id(follower_id),
-         {:ok, follow_activity} <- Utils.update_follow_state_for_all(follow_activity, "accept"),
-         {:ok, _follower, followed} <-
-           FollowingRelationship.update(follower, followed, :follow_accept) do
-      Notification.update_notification_type(followed, follow_activity)
-    end
-
-    {:ok, object, meta}
-  end
-
-  # Task this handles
-  # - Rejects all existing follow activities for this person
-  # - Updates the follow state
-  # - Dismisses notification
-  @impl true
-  def handle(
-        %{
-          data: %{
-            "actor" => actor,
-            "type" => "Reject",
-            "object" => follow_activity_id
-          }
-        } = object,
-        meta
-      ) do
-    with %Activity{data: %{"type" => "Follow"}} = follow_activity <-
-           Activity.get_by_ap_id(follow_activity_id),
-         %{actor: follower_id} <- follow_activity,
-         %User{} = followed <- User.get_cached_by_ap_id(actor),
-         %User{} = follower <- User.get_cached_by_ap_id(follower_id),
-         {:ok, _follow_activity} <- Utils.update_follow_state_for_all(follow_activity, "reject") do
-      FollowingRelationship.update(follower, followed, :follow_reject)
-      Notification.dismiss(follow_activity)
-    end
-
-    {:ok, object, meta}
-  end
-
-  # Task this handles
   # - Receives Accept for a QuoteRequest
   # - Stores the quoteAuthorization on the local quoting object
   # - Sends an Update activity so remotes get the quoteAuthorization
+  #
+  # NOTE: This clause MUST appear before the Follow Accept handler below,
+  # because Elixir matches clauses in declaration order and the Follow handler's
+  # pattern is a subset of this one (minus the "result" key). Without this
+  # ordering the Follow handler would swallow QuoteRequest Accepts silently.
   @impl true
   def handle(
         %{
@@ -126,22 +75,68 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   end
 
   # Task this handles
-  # - Receives Reject for a QuoteRequest
-  # - Marks the quoting object's approval state as rejected
+  # - Follows
+  # - Sends a notification
   @impl true
   def handle(
         %{
           data: %{
-            "type" => "Reject",
-            "object" => quote_request_id
+            "actor" => actor,
+            "type" => "Accept",
+            "object" => follow_activity_id
           }
         } = object,
         meta
       ) do
-    with %Activity{data: %{"type" => "QuoteRequest", "instrument" => quoting_ap_id}} <-
-           Activity.get_by_ap_id(quote_request_id),
-         %Object{} = quoting_object <- Object.get_cached_by_ap_id(quoting_ap_id) do
-      set_quote_approval_state(quoting_object, "rejected")
+    with %Activity{data: %{"type" => "Follow"}} = follow_activity <-
+           Activity.get_by_ap_id(follow_activity_id),
+         %{actor: follower_id} <- follow_activity,
+         %User{} = followed <- User.get_cached_by_ap_id(actor),
+         %User{} = follower <- User.get_cached_by_ap_id(follower_id),
+         {:ok, follow_activity} <- Utils.update_follow_state_for_all(follow_activity, "accept"),
+         {:ok, _follower, followed} <-
+           FollowingRelationship.update(follower, followed, :follow_accept) do
+      Notification.update_notification_type(followed, follow_activity)
+    end
+
+    {:ok, object, meta}
+  end
+
+  # Task this handles
+  # - Rejects for Follow: updates the follow state, dismisses notification
+  # - Rejects for QuoteRequest: marks the quoting object's approval state as rejected
+  #
+  # Combined into a single clause because both Follow and QuoteRequest Rejects
+  # share the same pattern shape; routing is done via the referenced activity type.
+  @impl true
+  def handle(
+        %{
+          data: %{
+            "actor" => actor,
+            "type" => "Reject",
+            "object" => activity_id
+          }
+        } = object,
+        meta
+      ) do
+    case Activity.get_by_ap_id(activity_id) do
+      %Activity{data: %{"type" => "Follow"}} = follow_activity ->
+        with %{actor: follower_id} <- follow_activity,
+             %User{} = followed <- User.get_cached_by_ap_id(actor),
+             %User{} = follower <- User.get_cached_by_ap_id(follower_id),
+             {:ok, _follow_activity} <-
+               Utils.update_follow_state_for_all(follow_activity, "reject") do
+          FollowingRelationship.update(follower, followed, :follow_reject)
+          Notification.dismiss(follow_activity)
+        end
+
+      %Activity{data: %{"type" => "QuoteRequest", "instrument" => quoting_ap_id}} ->
+        with %Object{} = quoting_object <- Object.get_cached_by_ap_id(quoting_ap_id) do
+          set_quote_approval_state(quoting_object, "rejected")
+        end
+
+      _ ->
+        :ok
     end
 
     {:ok, object, meta}
