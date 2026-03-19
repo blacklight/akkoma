@@ -93,6 +93,7 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   # Task this handles
   # - Receives Accept for a QuoteRequest
   # - Stores the quoteAuthorization on the local quoting object
+  # - Sends an Update activity so remotes get the quoteAuthorization
   @impl true
   def handle(
         %{
@@ -116,6 +117,9 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
       quoting_object
       |> Ecto.Changeset.change(data: updated_data)
       |> Repo.update()
+
+      # Re-federate the quoting object so remotes receive the quoteAuthorization
+      maybe_federate_quote_update(quoting_ap_id, updated_data)
     end
 
     {:ok, object, meta}
@@ -714,6 +718,17 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
     object
     |> Ecto.Changeset.change(data: updated_data)
     |> Repo.update()
+  end
+
+  defp maybe_federate_quote_update(quoting_ap_id, updated_data) do
+    with %User{} = actor <- User.get_cached_by_ap_id(updated_data["actor"]),
+         {:ok, update_data, _} <- Builder.update(actor, updated_data) do
+      Pipeline.common_pipeline(update_data, local: true)
+    else
+      e ->
+        Logger.error("Failed to federate quote update for #{quoting_ap_id}: #{inspect(e)}")
+        :error
+    end
   end
 
   defp send_notifications(meta) do

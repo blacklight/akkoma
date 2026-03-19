@@ -132,7 +132,10 @@ defmodule Pleroma.Web.ActivityPub.SideEffects.QuoteRequestTest do
         recipients: [user.ap_id]
       }
 
-      {:ok, _activity, _meta} = SideEffects.handle(accept_activity)
+      with_mock Pleroma.Web.ActivityPub.Pipeline,
+        common_pipeline: fn _data, _opts -> {:ok, %Activity{}, []} end do
+        {:ok, _activity, _meta} = SideEffects.handle(accept_activity)
+      end
 
       # Verify the quoteAuthorization and approval state were stored on the local object
       updated_object = Object.get_cached_by_ap_id(post_object.data["id"])
@@ -141,6 +144,63 @@ defmodule Pleroma.Web.ActivityPub.SideEffects.QuoteRequestTest do
                "https://remote.example/users/bob/quote_authorizations/abc-123"
 
       assert updated_object.data["quoteApprovalState"] == "accepted"
+    end
+
+    test "sends an Update activity to re-federate the quoting object", %{
+      user: user,
+      remote: remote,
+      post_object: post_object
+    } do
+      quote_request_data = %{
+        "id" => "#{user.ap_id}/activities/qr-1",
+        "type" => "QuoteRequest",
+        "actor" => user.ap_id,
+        "object" => "https://remote.example/objects/quoted-post",
+        "instrument" => post_object.data["id"],
+        "to" => [remote.ap_id]
+      }
+
+      {:ok, qr_activity} =
+        Pleroma.Repo.insert(%Activity{
+          data: quote_request_data,
+          local: true,
+          actor: user.ap_id,
+          recipients: [remote.ap_id]
+        })
+
+      accept_data = %{
+        "type" => "Accept",
+        "actor" => remote.ap_id,
+        "object" => qr_activity.data["id"],
+        "result" => "https://remote.example/users/bob/quote_authorizations/abc-123",
+        "to" => [user.ap_id]
+      }
+
+      accept_activity = %Activity{
+        data: accept_data,
+        local: false,
+        actor: remote.ap_id,
+        recipients: [user.ap_id]
+      }
+
+      with_mock Pleroma.Web.ActivityPub.Pipeline,
+        common_pipeline: fn _data, _opts -> {:ok, %Activity{}, []} end do
+        {:ok, _activity, _meta} = SideEffects.handle(accept_activity)
+
+        # Verify Pipeline.common_pipeline was called with an Update activity
+        assert_called(
+          Pleroma.Web.ActivityPub.Pipeline.common_pipeline(
+            :meck.is(fn data ->
+              data["type"] == "Update" and
+                data["object"]["quoteAuthorization"] ==
+                  "https://remote.example/users/bob/quote_authorizations/abc-123" and
+                data["object"]["id"] == post_object.data["id"] and
+                data["actor"] == user.ap_id
+            end),
+            :_
+          )
+        )
+      end
     end
   end
 
