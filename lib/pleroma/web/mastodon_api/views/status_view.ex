@@ -375,6 +375,8 @@ defmodule Pleroma.Web.MastodonAPI.StatusView do
       quote_apid = get_single_apid(object.data, "quoteUri")
       quote = quote_apid && Activity.get_quoted_activity_from_object(object)
       quote_id = quote_apid && get_id_or_ghost(quote)
+      quote_approval_state = object.data["quoteApprovalState"] || "accepted"
+      quote_approved = quote_approval_state == "accepted"
 
       lang = language(object)
 
@@ -414,7 +416,7 @@ defmodule Pleroma.Web.MastodonAPI.StatusView do
         language: lang,
         emojis: build_emojis(object.data["emoji"]),
         quote_id: quote_id,
-        quote: maybe_render_quote(quote, opts),
+        quote: maybe_render_quote(quote, opts, quote_approval_state),
         emoji_reactions: emoji_reactions,
         pleroma: %{
           local: activity.local,
@@ -436,7 +438,8 @@ defmodule Pleroma.Web.MastodonAPI.StatusView do
           # (e.g. because it’s a private post we aren't allowed to access, or just federation woes)
           # allowing users to potentially discover the full context from other accounts/servers.
           in_reply_to_apid: reply_to_apid,
-          quote_apid: quote_apid
+          quote_apid: quote_apid,
+          quote_approved: quote_approved
         }
       }
     else
@@ -789,9 +792,9 @@ defmodule Pleroma.Web.MastodonAPI.StatusView do
 
   defp build_image_url(_, _), do: nil
 
-  defp maybe_render_quote(nil, _), do: nil
+  defp maybe_render_quote(nil, _, _), do: nil
 
-  defp maybe_render_quote(quote, opts) do
+  defp maybe_render_quote(quote, opts, approval_state) do
     with false <- Map.get(opts, :do_not_recurse, false),
          %User{} = quoted_user <- User.get_cached_by_ap_id(quote.actor),
          true <- visible_for_user?(quote, opts[:for]),
@@ -808,7 +811,7 @@ defmodule Pleroma.Web.MastodonAPI.StatusView do
       # such that the "quote" object meets both the old *oma convention
       # being directly a status itself and the new Masto flavour with a sub-object
       qdata
-      |> Map.put(:state, "accepted")
+      |> Map.put(:state, approval_state)
       |> Map.put(:quoted_status, qdata)
     else
       _ -> nil

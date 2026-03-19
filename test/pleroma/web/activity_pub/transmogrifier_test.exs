@@ -833,6 +833,86 @@ defmodule Pleroma.Web.ActivityPub.TransmogrifierTest do
     end
   end
 
+  describe "set_quote_url/1" do
+    test "emits all compat fields from quoteUri" do
+      object = %{
+        "quoteUri" => "https://example.com/objects/quoted-post",
+        "tag" => []
+      }
+
+      result = Transmogrifier.set_quote_url(object)
+
+      assert result["quoteUrl"] == "https://example.com/objects/quoted-post"
+      assert result["quote"] == "https://example.com/objects/quoted-post"
+      assert result["_misskey_quote"] == "https://example.com/objects/quoted-post"
+
+      assert Enum.any?(result["tag"], fn tag ->
+               tag["type"] == "Link" and
+                 tag["href"] == "https://example.com/objects/quoted-post" and
+                 tag["rel"] == "https://misskey-hub.net/ns#_misskey_quote"
+             end)
+    end
+
+    test "does not emit quote fields when no quoteUri" do
+      object = %{"content" => "hello"}
+      result = Transmogrifier.set_quote_url(object)
+      refute Map.has_key?(result, "quote")
+      refute Map.has_key?(result, "quoteUrl")
+      refute Map.has_key?(result, "_misskey_quote")
+    end
+
+    test "passes through quoteAuthorization if present" do
+      object = %{
+        "quoteUri" => "https://example.com/objects/quoted-post",
+        "quoteAuthorization" => "https://example.com/users/alice/quote_authorizations/123"
+      }
+
+      result = Transmogrifier.set_quote_url(object)
+      assert result["quoteAuthorization"] == "https://example.com/users/alice/quote_authorizations/123"
+    end
+
+    test "strips quoteAuthorization if not present" do
+      object = %{
+        "quoteUri" => "https://example.com/objects/quoted-post"
+      }
+
+      result = Transmogrifier.set_quote_url(object)
+      refute Map.has_key?(result, "quoteAuthorization")
+    end
+  end
+
+  describe "set_interaction_policy/1" do
+    test "adds canQuote policy to local objects" do
+      local_id = Pleroma.Web.Endpoint.url() <> "/objects/local-post"
+      object = %{"id" => local_id}
+
+      result = Transmogrifier.set_interaction_policy(object)
+
+      assert result["interactionPolicy"]["canQuote"]["automaticApproval"] == [
+               "https://www.w3.org/ns/activitystreams#Public"
+             ]
+    end
+
+    test "does not add policy to remote objects" do
+      object = %{"id" => "https://remote.example/objects/remote-post"}
+
+      result = Transmogrifier.set_interaction_policy(object)
+      refute Map.has_key?(result, "interactionPolicy")
+    end
+
+    test "preserves existing interactionPolicy" do
+      policy = %{"canQuote" => %{"automaticApproval" => ["https://remote.example/followers"]}}
+
+      object = %{
+        "id" => "https://remote.example/objects/remote-post",
+        "interactionPolicy" => policy
+      }
+
+      result = Transmogrifier.set_interaction_policy(object)
+      assert result["interactionPolicy"] == policy
+    end
+  end
+
   describe "prepare_object/1" do
     test "it processes history" do
       original = %{

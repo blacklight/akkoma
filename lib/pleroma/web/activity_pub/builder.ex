@@ -44,6 +44,34 @@ defmodule Pleroma.Web.ActivityPub.Builder do
     accept_or_reject(actor, accepted_activity, "Accept")
   end
 
+  def accept_quote_request(actor, quote_request_activity, authorization_ap_id) do
+    data = %{
+      "id" => Utils.generate_activity_id(),
+      "actor" => actor.ap_id,
+      "type" => "Accept",
+      "object" => quote_request_activity.data["id"],
+      "result" => authorization_ap_id,
+      "to" => [quote_request_activity.data["actor"]]
+    }
+
+    {:ok, data, []}
+  end
+
+  def quote_request(actor, quoted_object, quoting_object_ap_id) do
+    quoted_author = quoted_object.data["attributedTo"] || quoted_object.data["actor"]
+
+    data = %{
+      "id" => Utils.generate_activity_id(),
+      "type" => "QuoteRequest",
+      "actor" => actor.ap_id,
+      "object" => quoted_object.data["id"],
+      "instrument" => quoting_object_ap_id,
+      "to" => [quoted_author]
+    }
+
+    {:ok, data, []}
+  end
+
   @spec follow(User.t(), User.t()) :: {:ok, map(), keyword()}
   def follow(follower, followed) do
     data = %{

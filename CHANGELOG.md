@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Unreleased
 
+### Added
+- FEP-044f: Consent-respecting quote posts support
+  - Inbound: parse FEP-044f `quote` field and normalize to `quoteUri`
+  - Outbound: emit `quote`, `quoteUrl`, `_misskey_quote`, and FEP-e232 tag link on outgoing quote posts
+  - Outbound: emit `interactionPolicy.canQuote` on local posts
+  - Inbound: handle `QuoteRequest` activities with auto-approval and `QuoteAuthorization` generation
+  - Outbound: send `QuoteRequest` when quoting posts that advertise FEP-044f support
+  - Handle `Accept`/`Reject` responses for `QuoteRequest` activities
+  - Serve `QuoteAuthorization` objects via HTTP GET at `/users/:nickname/quote_authorizations/:id`
+  - Handle revocation via `Delete` of `QuoteAuthorization` objects
+  - Track quote approval state (`pending`/`accepted`/`rejected`/`revoked`) on objects
+  - Expose `quote_approved` in `akkoma` section and real `state` in Mastodon-compat quote response
+  - JSON-LD context updated with FEP-044f and GoToSocial namespace terms
+
 ### Fixed
 - fix pagination parameters being ignored on hashtag timelines
 

@@ -20,7 +20,8 @@ defmodule Pleroma.Constants do
       "deleted_activity_id",
       "pleroma_internal",
       "generator",
-      "voters"
+      "voters",
+      "quoteApprovalState"
     ]
   )
 

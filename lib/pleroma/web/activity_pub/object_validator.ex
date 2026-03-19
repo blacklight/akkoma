@@ -31,6 +31,7 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidator do
   alias Pleroma.Web.ActivityPub.ObjectValidators.FollowValidator
   alias Pleroma.Web.ActivityPub.ObjectValidators.LikeValidator
   alias Pleroma.Web.ActivityPub.ObjectValidators.QuestionValidator
+  alias Pleroma.Web.ActivityPub.ObjectValidators.QuoteRequestValidator
   alias Pleroma.Web.ActivityPub.ObjectValidators.UndoValidator
   alias Pleroma.Web.ActivityPub.ObjectValidators.UpdateValidator
 
@@ -183,6 +184,16 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidator do
     with {:ok, object} <-
            object
            |> validator.cast_and_validate()
+           |> Ecto.Changeset.apply_action(:insert) do
+      object = stringify_keys(object)
+      {:ok, object, meta}
+    end
+  end
+
+  def validate(%{"type" => "QuoteRequest"} = object, meta) do
+    with {:ok, object} <-
+           object
+           |> QuoteRequestValidator.cast_and_validate()
            |> Ecto.Changeset.apply_action(:insert) do
       object = stringify_keys(object)
       {:ok, object, meta}

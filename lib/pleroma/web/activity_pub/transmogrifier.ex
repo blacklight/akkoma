@@ -22,6 +22,8 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
   alias Pleroma.Web.ActivityPub.ObjectValidators.CommonFixes
   alias Pleroma.Web.Federator
 
+  import Ecto.Query
+
   require Pleroma.Constants
   require Logger
 
@@ -238,6 +240,15 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
     else
       object
     end
+  end
+
+  # FEP-044f
+  def fix_quote_url(%{"quote" => quote_url} = object, options)
+      when is_binary(quote_url) and quote_url != "" do
+    object
+    |> Map.put("quoteUri", quote_url)
+    |> Map.delete("quote")
+    |> fix_quote_url(options)
   end
 
   # Soapbox
@@ -579,6 +590,17 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
   end
 
   defp handle_incoming_normalised(
+         %{"type" => "QuoteRequest"} = data,
+         _options
+       ) do
+    with {:ok, %User{}} <- ObjectValidator.fetch_actor(data),
+         {:ok, activity, _} <-
+           Pipeline.common_pipeline(data, local: false) do
+      {:ok, activity}
+    end
+  end
+
+  defp handle_incoming_normalised(
          %{"type" => type} = data,
          _options
        )
@@ -594,9 +616,44 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
   end
 
   defp handle_incoming_normalised(
-         %{"type" => "Delete"} = data,
+         %{"type" => "Delete", "object" => object_id} = data,
          _options
-       ) do
+       )
+       when is_binary(object_id) do
+    alias Pleroma.QuoteAuthorization
+
+    # Check if this is a Delete for a QuoteAuthorization
+    case QuoteAuthorization.get_by_ap_id(object_id) do
+      %QuoteAuthorization{} ->
+        with {:ok, %User{}} <- ObjectValidator.fetch_actor(data),
+             {:ok, _} <- QuoteAuthorization.delete_by_ap_id(object_id) do
+          # Strip quoteAuthorization from any object that references it
+          from(o in Object,
+            where: fragment("?->>'quoteAuthorization' = ?", o.data, ^object_id)
+          )
+          |> Repo.all()
+          |> Enum.each(fn object ->
+            updated_data =
+              object.data
+              |> Map.delete("quoteAuthorization")
+              |> Map.put("quoteApprovalState", "revoked")
+
+            object
+            |> Ecto.Changeset.change(data: updated_data)
+            |> Repo.update()
+          end)
+
+          :ok
+        else
+          _ -> {:error, :not_authorized}
+        end
+
+      nil ->
+        handle_incoming_delete(data)
+    end
+  end
+
+  defp handle_incoming_delete(data) do
     oid_result = ObjectValidators.ObjectID.cast(data["object"])
 
     with {_, {:ok, object_id}} <- {:object_id, oid_result},
@@ -783,10 +840,53 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
   def set_reply_to_uri(obj), do: obj
 
   def set_quote_url(%{"quoteUri" => quote} = object) when is_binary(quote) do
-    Map.put(object, "quoteUrl", quote)
+    object
+    |> Map.put("quoteUrl", quote)
+    |> Map.put("quote", quote)
+    |> Map.put("_misskey_quote", quote)
+    |> add_quote_tag(quote)
+    |> maybe_set_quote_authorization()
   end
 
   def set_quote_url(obj), do: obj
+
+  defp add_quote_tag(object, quote_url) do
+    tag = object["tag"] || []
+
+    quote_tag = %{
+      "type" => "Link",
+      "mediaType" => "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"",
+      "rel" => "https://misskey-hub.net/ns#_misskey_quote",
+      "href" => quote_url
+    }
+
+    Map.put(object, "tag", tag ++ [quote_tag])
+  end
+
+  defp maybe_set_quote_authorization(%{"quoteAuthorization" => auth} = object)
+       when is_binary(auth) and auth != "" do
+    object
+  end
+
+  defp maybe_set_quote_authorization(object) do
+    Map.delete(object, "quoteAuthorization")
+  end
+
+  def set_interaction_policy(%{"interactionPolicy" => _} = object), do: object
+
+  def set_interaction_policy(%{"id" => id} = object) when is_binary(id) do
+    if String.starts_with?(id, Pleroma.Web.Endpoint.url() <> "/") do
+      Map.put(object, "interactionPolicy", %{
+        "canQuote" => %{
+          "automaticApproval" => [Pleroma.Constants.as_public()]
+        }
+      })
+    else
+      object
+    end
+  end
+
+  def set_interaction_policy(object), do: object
 
   @doc """
   Inline first page of the `replies` collection,
@@ -818,6 +918,7 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
     |> set_conversation
     |> set_reply_to_uri
     |> set_quote_url()
+    |> set_interaction_policy()
     |> set_replies
     |> strip_internal_fields
     |> strip_internal_tags

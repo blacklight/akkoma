@@ -21,6 +21,8 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.AcceptRejectValidator do
         activity_fields()
       end
     end
+
+    field(:result, :string)
   end
 
   def cast_data(data) do
@@ -33,7 +35,7 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.AcceptRejectValidator do
     |> validate_required([:type, :actor, :to, :cc, :object])
     |> validate_inclusion(:type, ["Accept", "Reject"])
     |> validate_actor_presence()
-    |> validate_object_presence(allowed_types: ["Follow"])
+    |> validate_object_presence(allowed_types: ["Follow", "QuoteRequest"])
     |> validate_accept_reject_rights()
   end
 
@@ -46,8 +48,8 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.AcceptRejectValidator do
 
   def validate_accept_reject_rights(cng) do
     with object_id when is_binary(object_id) <- get_field(cng, :object),
-         %Activity{data: %{"object" => followed_actor}} <- Activity.get_by_ap_id(object_id),
-         true <- followed_actor == get_field(cng, :actor) do
+         %Activity{} = object_activity <- Activity.get_by_ap_id(object_id),
+         true <- actor_has_rights?(get_field(cng, :actor), object_activity) do
       cng
     else
       _e ->
@@ -55,6 +57,20 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.AcceptRejectValidator do
         |> add_error(:actor, "can't accept or reject the given activity")
     end
   end
+
+  defp actor_has_rights?(actor, %Activity{data: %{"type" => "Follow", "object" => target}}) do
+    actor == target
+  end
+
+  defp actor_has_rights?(actor, %Activity{data: %{"type" => "QuoteRequest", "object" => quoted_object_id}}) do
+    with %Pleroma.Object{} = object <- Pleroma.Object.get_cached_by_ap_id(quoted_object_id) do
+      (object.data["attributedTo"] || object.data["actor"]) == actor
+    else
+      _ -> false
+    end
+  end
+
+  defp actor_has_rights?(_, _), do: false
 
   defp maybe_fetch_object(%{"object" => %{} = object} = activity) do
     # If we don't have an ID, we may have to fetch the object
@@ -78,6 +94,16 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.AcceptRejectValidator do
     else
       _e ->
         object
+    end
+  end
+
+  defp fetch_transient_object(
+         %{"actor" => actor, "object" => _quoted, "type" => "QuoteRequest"} = object
+       ) do
+    with %Activity{} = activity <- Activity.get_by_ap_id(object["id"]) do
+      activity.data
+    else
+      _e -> object
     end
   end
 

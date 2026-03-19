@@ -840,6 +840,71 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier.NoteHandlingTest do
         "quoteUri" => "https://misskey.io/notes/934gok3482"
       } = Transmogrifier.fix_quote_url(note)
     end
+
+    test "a FEP-044f quote should work", _ do
+      Tesla.Mock.mock(fn %{
+                           method: :get,
+                           url: "https://example.com/objects/43479e20-c0f8-4f49-bf7f-13fab8234924"
+                         } ->
+        %Tesla.Env{
+          status: 200,
+          body: File.read!("test/fixtures/quoted_status.json"),
+          headers: HttpRequestMock.activitypub_object_headers()
+        }
+      end)
+
+      insert(:user, %{ap_id: "https://remote.example/users/bob"})
+      insert(:user, %{ap_id: "https://example.com/users/user"})
+
+      note =
+        "test/fixtures/fep044f/quote.json"
+        |> File.read!()
+        |> Jason.decode!()
+
+      %{"quoteUri" => "https://example.com/objects/43479e20-c0f8-4f49-bf7f-13fab8234924"} =
+        Transmogrifier.fix_quote_url(note)
+    end
+
+    test "FEP-044f quote field takes priority over quoteUrl", _ do
+      Tesla.Mock.mock(fn %{
+                           method: :get,
+                           url: "https://example.com/objects/43479e20-c0f8-4f49-bf7f-13fab8234924"
+                         } ->
+        %Tesla.Env{
+          status: 200,
+          body: File.read!("test/fixtures/quoted_status.json"),
+          headers: HttpRequestMock.activitypub_object_headers()
+        }
+      end)
+
+      insert(:user, %{ap_id: "https://example.com/users/user"})
+
+      note = %{
+        "type" => "Note",
+        "quote" => "https://example.com/objects/43479e20-c0f8-4f49-bf7f-13fab8234924",
+        "quoteUrl" => "https://example.com/objects/stale-url"
+      }
+
+      result = Transmogrifier.fix_quote_url(note)
+      assert result["quoteUri"] == "https://example.com/objects/43479e20-c0f8-4f49-bf7f-13fab8234924"
+      refute Map.has_key?(result, "quote")
+    end
+
+    test "interactionPolicy is preserved on ingested objects", _ do
+      note = %{
+        "type" => "Note",
+        "id" => "https://remote.example/objects/1",
+        "interactionPolicy" => %{
+          "canQuote" => %{
+            "automaticApproval" => ["https://www.w3.org/ns/activitystreams#Public"]
+          }
+        }
+      }
+
+      assert note["interactionPolicy"]["canQuote"]["automaticApproval"] == [
+               "https://www.w3.org/ns/activitystreams#Public"
+             ]
+    end
   end
 
   test "the standalone note uses its own ID when context is missing" do

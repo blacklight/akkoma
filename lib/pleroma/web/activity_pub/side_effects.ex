@@ -48,8 +48,9 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
         } = object,
         meta
       ) do
-    with %Activity{actor: follower_id} = follow_activity <-
+    with %Activity{data: %{"type" => "Follow"}} = follow_activity <-
            Activity.get_by_ap_id(follow_activity_id),
+         %{actor: follower_id} <- follow_activity,
          %User{} = followed <- User.get_cached_by_ap_id(actor),
          %User{} = follower <- User.get_cached_by_ap_id(follower_id),
          {:ok, follow_activity} <- Utils.update_follow_state_for_all(follow_activity, "accept"),
@@ -76,13 +77,67 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
         } = object,
         meta
       ) do
-    with %Activity{actor: follower_id} = follow_activity <-
+    with %Activity{data: %{"type" => "Follow"}} = follow_activity <-
            Activity.get_by_ap_id(follow_activity_id),
+         %{actor: follower_id} <- follow_activity,
          %User{} = followed <- User.get_cached_by_ap_id(actor),
          %User{} = follower <- User.get_cached_by_ap_id(follower_id),
          {:ok, _follow_activity} <- Utils.update_follow_state_for_all(follow_activity, "reject") do
       FollowingRelationship.update(follower, followed, :follow_reject)
       Notification.dismiss(follow_activity)
+    end
+
+    {:ok, object, meta}
+  end
+
+  # Task this handles
+  # - Receives Accept for a QuoteRequest
+  # - Stores the quoteAuthorization on the local quoting object
+  @impl true
+  def handle(
+        %{
+          data: %{
+            "type" => "Accept",
+            "object" => quote_request_id,
+            "result" => authorization_ap_id
+          }
+        } = object,
+        meta
+      )
+      when is_binary(authorization_ap_id) do
+    with %Activity{data: %{"type" => "QuoteRequest", "instrument" => quoting_ap_id}} <-
+           Activity.get_by_ap_id(quote_request_id),
+         %Object{} = quoting_object <- Object.get_cached_by_ap_id(quoting_ap_id) do
+      updated_data =
+        quoting_object.data
+        |> Map.put("quoteAuthorization", authorization_ap_id)
+        |> Map.put("quoteApprovalState", "accepted")
+
+      quoting_object
+      |> Ecto.Changeset.change(data: updated_data)
+      |> Repo.update()
+    end
+
+    {:ok, object, meta}
+  end
+
+  # Task this handles
+  # - Receives Reject for a QuoteRequest
+  # - Marks the quoting object's approval state as rejected
+  @impl true
+  def handle(
+        %{
+          data: %{
+            "type" => "Reject",
+            "object" => quote_request_id
+          }
+        } = object,
+        meta
+      ) do
+    with %Activity{data: %{"type" => "QuoteRequest", "instrument" => quoting_ap_id}} <-
+           Activity.get_by_ap_id(quote_request_id),
+         %Object{} = quoting_object <- Object.get_cached_by_ap_id(quoting_ap_id) do
+      set_quote_approval_state(quoting_object, "rejected")
     end
 
     {:ok, object, meta}
@@ -243,6 +298,8 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
 
       Pleroma.Search.add_to_index(Map.put(activity, :object, object))
 
+      maybe_send_quote_request(user, object)
+
       meta =
         meta
         |> add_notifications(notifications)
@@ -286,6 +343,71 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
          :ok <- handle_undoing(undone_object) do
       {:ok, object, meta}
     end
+  end
+
+  # Tasks this handles:
+  # - Auto-approve quote requests for local posts (default: public policy)
+  # - Create QuoteAuthorization
+  # - Send Accept with authorization URL
+  @impl true
+  def handle(
+        %{
+          data: %{
+            "type" => "QuoteRequest",
+            "actor" => requesting_actor,
+            "object" => quoted_object_id
+          }
+        } = activity,
+        meta
+      ) do
+    alias Pleroma.QuoteAuthorization
+
+    with %Object{} = quoted_object <- Object.get_cached_by_ap_id(quoted_object_id),
+         author_ap_id <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
+         %User{local: true} = author <- User.get_cached_by_ap_id(author_ap_id) do
+      instrument = activity.data["instrument"]
+      authorization_id = Ecto.UUID.generate()
+      authorization_ap_id = "#{author.ap_id}/quote_authorizations/#{authorization_id}"
+
+      authorization_data = %{
+        "@context" => [
+          "https://www.w3.org/ns/activitystreams",
+          %{
+            "QuoteAuthorization" => "https://w3id.org/fep/044f#QuoteAuthorization",
+            "interactingObject" => %{
+              "@id" => "https://gotosocial.org/ns#interactingObject",
+              "@type" => "@id"
+            },
+            "interactionTarget" => %{
+              "@id" => "https://gotosocial.org/ns#interactionTarget",
+              "@type" => "@id"
+            }
+          }
+        ],
+        "type" => "QuoteAuthorization",
+        "id" => authorization_ap_id,
+        "attributedTo" => author.ap_id,
+        "interactionTarget" => quoted_object_id,
+        "interactingObject" => instrument
+      }
+
+      {:ok, _qa} =
+        QuoteAuthorization.create(%{
+          id: authorization_id,
+          ap_id: authorization_ap_id,
+          user_id: author.id,
+          quoted_ap_id: quoted_object_id,
+          quoting_ap_id: instrument || requesting_actor,
+          data: authorization_data
+        })
+
+      {:ok, accept_data, _} =
+        Builder.accept_quote_request(author, activity, authorization_ap_id)
+
+      Pipeline.common_pipeline(accept_data, local: true)
+    end
+
+    {:ok, activity, meta}
   end
 
   # Tasks this handles:
@@ -566,6 +688,32 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   @spec delete_object(Object.t()) :: :ok | {:error, Ecto.Changeset.t()}
   defp delete_object(object) do
     with {:ok, _} <- Repo.delete(object), do: :ok
+  end
+
+  defp maybe_send_quote_request(user, object) do
+    with quote_uri when is_binary(quote_uri) <- object.data["quoteUri"],
+         %Object{} = quoted_object <- Object.get_cached_by_ap_id(quote_uri),
+         %{"interactionPolicy" => %{"canQuote" => _}} <- quoted_object.data,
+         quoted_author <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
+         false <- quoted_author == user.ap_id do
+      # Mark the quoting object as pending approval
+      set_quote_approval_state(object, "pending")
+
+      {:ok, quote_request_data, _} =
+        Builder.quote_request(user, quoted_object, object.data["id"])
+
+      Pipeline.common_pipeline(quote_request_data, local: true)
+    else
+      _ -> :ok
+    end
+  end
+
+  defp set_quote_approval_state(%Object{} = object, state) do
+    updated_data = Map.put(object.data, "quoteApprovalState", state)
+
+    object
+    |> Ecto.Changeset.change(data: updated_data)
+    |> Repo.update()
   end
 
   defp send_notifications(meta) do

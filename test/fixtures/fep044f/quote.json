@@ -1,0 +1,42 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/activitystreams",
+    {
+      "quote": {
+        "@id": "https://w3id.org/fep/044f#quote",
+        "@type": "@id"
+      },
+      "quoteAuthorization": {
+        "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+        "@type": "@id"
+      },
+      "gts": "https://gotosocial.org/ns#",
+      "interactionPolicy": {
+        "@id": "gts:interactionPolicy",
+        "@type": "@id"
+      },
+      "canQuote": {
+        "@id": "gts:canQuote",
+        "@type": "@id"
+      },
+      "automaticApproval": {
+        "@id": "gts:automaticApproval",
+        "@type": "@id"
+      }
+    }
+  ],
+  "id": "https://remote.example/users/bob/statuses/1",
+  "type": "Note",
+  "attributedTo": "https://remote.example/users/bob",
+  "content": "<p>I am quoting alice's post</p>",
+  "published": "2026-03-18T10:00:00Z",
+  "to": [
+    "https://www.w3.org/ns/activitystreams#Public"
+  ],
+  "cc": [
+    "https://remote.example/users/bob/followers"
+  ],
+  "quote": "https://example.com/objects/43479e20-c0f8-4f49-bf7f-13fab8234924",
+  "sensitive": false,
+  "tag": []
+}
