@@ -19,7 +19,9 @@ defmodule Pleroma.Web.ActivityPub.ActivityPub do
   alias Pleroma.Repo
   alias Pleroma.Upload
   alias Pleroma.User
+  alias Pleroma.Web.ActivityPub.Builder
   alias Pleroma.Web.ActivityPub.MRF
+  alias Pleroma.Web.ActivityPub.Pipeline
   alias Pleroma.Web.ActivityPub.Visibility
   alias Pleroma.Web.Streamer
   alias Pleroma.Workers.BackgroundWorker
@@ -319,6 +321,7 @@ defmodule Pleroma.Web.ActivityPub.ActivityPub do
          _ <- notify_and_stream(activity),
          _ <- maybe_bump_conversation(activity),
          :ok <- maybe_schedule_poll_notifications(activity),
+         _ <- maybe_send_quote_request(actor, activity),
          :ok <- maybe_federate(activity) do
       {:ok, activity}
     else
@@ -336,6 +339,21 @@ defmodule Pleroma.Web.ActivityPub.ActivityPub do
   defp maybe_schedule_poll_notifications(activity) do
     PollWorker.schedule_poll_end(activity)
     :ok
+  end
+
+  defp maybe_send_quote_request(%User{} = user, %Activity{} = activity) do
+    with %Object{} = object <- Object.normalize(activity, fetch: false),
+         quote_uri when is_binary(quote_uri) <- object.data["quoteUri"],
+         %Object{} = quoted_object <- Object.get_cached_by_ap_id(quote_uri),
+         quoted_author <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
+         false <- quoted_author == user.ap_id do
+      {:ok, quote_request_data, _} =
+        Builder.quote_request(user, quoted_object, object.data["id"])
+
+      Pipeline.common_pipeline(quote_request_data, local: true)
+    else
+      _ -> :ok
+    end
   end
 
   @spec unfollow(User.t(), User.t(), String.t() | nil, boolean()) ::

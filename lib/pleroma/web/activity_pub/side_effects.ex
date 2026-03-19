@@ -297,8 +297,6 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
 
       Pleroma.Search.add_to_index(Map.put(activity, :object, object))
 
-      maybe_send_quote_request(user, object)
-
       meta =
         meta
         |> add_notifications(notifications)
@@ -687,33 +685,6 @@ defmodule Pleroma.Web.ActivityPub.SideEffects do
   @spec delete_object(Object.t()) :: :ok | {:error, Ecto.Changeset.t()}
   defp delete_object(object) do
     with {:ok, _} <- Repo.delete(object), do: :ok
-  end
-
-  defp maybe_send_quote_request(user, object) do
-    with quote_uri when is_binary(quote_uri) <- object.data["quoteUri"],
-         %Object{} = quoted_object <- Object.get_cached_by_ap_id(quote_uri),
-         quoted_author <- quoted_object.data["attributedTo"] || quoted_object.data["actor"],
-         false <- quoted_author == user.ap_id do
-      # Only mark as pending when the remote explicitly advertises canQuote
-      if match?(%{"interactionPolicy" => %{"canQuote" => _}}, quoted_object.data) do
-        set_quote_approval_state(object, "pending")
-      end
-
-      {:ok, quote_request_data, _} =
-        Builder.quote_request(user, quoted_object, object.data["id"])
-
-      Logger.info("Sending QuoteRequest: #{inspect(quote_request_data)}")
-
-      result = Pipeline.common_pipeline(quote_request_data, local: true)
-
-      Logger.info("QuoteRequest pipeline result: #{inspect(result)}")
-
-      result
-    else
-      e ->
-        Logger.warning("QuoteRequest skipped for #{object.data["id"]}: #{inspect(e)}")
-        :ok
-    end
   end
 
   defp set_quote_approval_state(%Object{} = object, state) do
