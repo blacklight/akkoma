@@ -28,7 +28,9 @@ defmodule Pleroma.Web.ActivityPub.ObjectValidators.QuestionValidator do
     end
 
     field(:closed, ObjectValidators.DateTime)
+    field(:votersCount, :integer)
     field(:voters, {:array, ObjectValidators.ObjectID}, default: [])
+    field(:nonAnonymous, :boolean)
     embeds_many(:anyOf, QuestionOptionsValidator)
     embeds_many(:oneOf, QuestionOptionsValidator)
   end

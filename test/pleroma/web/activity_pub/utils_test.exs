@@ -146,7 +146,10 @@ defmodule Pleroma.Web.ActivityPub.UtilsTest do
                "https://purl.archive.org/socialweb/webfinger",
                %{
                  "@language" => "und",
-                 "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm"
+                 "votersCount" => "toot:votersCount",
+                 "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm",
+                 "nonAnonymous" => "sm:nonAnonymous",
+                 "sm" => "http://smithereen.software/ns#"
                }
              ]
            }

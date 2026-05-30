@@ -302,6 +302,10 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
     |> Map.drop(["conversation"])
   end
 
+  defp is_valid_mime(mimestr) do
+    is_binary(mimestr) && MIME.extensions(mimestr) != []
+  end
+
   def fix_attachments(%{"attachment" => attachment} = object) when is_list(attachment) do
     attachments =
       Enum.map(attachment, fn data ->
@@ -314,13 +318,13 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
 
         media_type =
           cond do
-            is_map(url) && MIME.extensions(url["mediaType"]) != [] ->
+            is_map(url) && is_valid_mime(url["mediaType"]) ->
               url["mediaType"]
 
-            is_bitstring(data["mediaType"]) && MIME.extensions(data["mediaType"]) != [] ->
+            is_valid_mime(data["mediaType"]) ->
               data["mediaType"]
 
-            is_bitstring(data["mimeType"]) && MIME.extensions(data["mimeType"]) != [] ->
+            is_valid_mime(data["mimeType"]) ->
               data["mimeType"]
 
             true ->
@@ -487,6 +491,7 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
        ) do
     with context <- data["context"] || Utils.generate_context_id(),
          content <- data["content"] || "",
+         objects <- List.wrap(objects),
          %User{} = actor <- User.get_cached_by_ap_id(actor),
          # Reduce the object list to find the reported user.
          %User{} = account <- get_reported(objects),
@@ -911,6 +916,16 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
     end
   end
 
+  defp set_voters_count(%{"votersCount" => n} = obj) when is_integer(n) do
+    obj
+  end
+
+  defp set_voters_count(%{"voters" => voters} = obj) when is_list(voters) do
+    Map.put_new(obj, "votersCount", length(voters))
+  end
+
+  defp set_voters_count(obj), do: obj
+
   # Prepares the object of an outgoing create activity.
   def prepare_object(object) do
     object
@@ -924,6 +939,7 @@ defmodule Pleroma.Web.ActivityPub.Transmogrifier do
     |> set_quote_url()
     |> set_interaction_policy()
     |> set_replies
+    |> set_voters_count()
     |> strip_internal_fields
     |> strip_internal_tags
     |> set_type

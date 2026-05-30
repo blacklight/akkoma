@@ -152,7 +152,14 @@ defmodule Pleroma.Web.CommonAPI.Utils do
         |> DateTime.to_iso8601()
 
       key = if Params.truthy_param?(data.poll[:multiple]), do: "anyOf", else: "oneOf"
-      poll = %{"type" => "Question", key => option_notes, "closed" => end_time}
+
+      poll = %{
+        "type" => "Question",
+        key => option_notes,
+        "closed" => end_time,
+        "votersCount" => 0,
+        "nonAnonymous" => false
+      }
 
       {:ok, {poll, emoji}}
     end
@@ -259,6 +266,9 @@ defmodule Pleroma.Web.CommonAPI.Utils do
     |> (fn {text, mentions, tags} ->
           {String.replace(text, ~r/\r?\n/, "<br>"), mentions, tags}
         end).()
+
+    # XXX: breaks rel=me links in bios, thus for now omitted.
+    # |> Formatter.html_escape("text/html")
   end
 
   def format_input(text, "text/bbcode", options) do
@@ -268,19 +278,21 @@ defmodule Pleroma.Web.CommonAPI.Utils do
     |> BBCode.to_html()
     |> (fn {:ok, html} -> html end).()
     |> Formatter.linkify(options)
+    |> Formatter.html_escape("text/html")
   end
 
   def format_input(text, "text/html", options) do
     text
-    |> Formatter.html_escape("text/html")
     |> Formatter.linkify(options)
+    |> Formatter.html_escape("text/html")
   end
 
   def format_input(text, "text/x.misskeymarkdown", options) do
     text
     |> Formatter.markdown_to_html(%{breaks: true})
     |> MfmParser.Parser.parse()
-    |> MfmParser.Encoder.to_html()
+    # Must preserve HTML tags from markdown parser (last step removes dangerous bits)
+    |> MfmParser.Encoder.to_html(escape_text: false)
     |> Formatter.linkify(options)
     |> Formatter.html_escape("text/html")
   end

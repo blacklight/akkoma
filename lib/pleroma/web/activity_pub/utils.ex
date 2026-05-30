@@ -105,7 +105,13 @@ defmodule Pleroma.Web.ActivityPub.Utils do
         "https://purl.archive.org/socialweb/webfinger",
         %{
           "@language" => "und",
-          "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm"
+          # More Mastodon extensions not included in litepub
+          # (The toot: prefix is already defined in the litepub schema)
+          "votersCount" => "toot:votersCount",
+          # Further verbose definitions
+          "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm",
+          "sm" => "http://smithereen.software/ns#",
+          "nonAnonymous" => "sm:nonAnonymous"
         }
       ]
     }
