@@ -108,6 +108,7 @@ defmodule Pleroma.User.Fetcher do
     is_locked = data["manuallyApprovesFollowers"] || false
     data = Transmogrifier.maybe_fix_user_object(data)
     is_discoverable = data["discoverable"] || false
+    is_indexable = if is_boolean(data["indexable"]), do: data["indexable"], else: true
     invisible = data["invisible"] || false
     actor_type = data["type"] || "Person"
 
@@ -159,6 +160,7 @@ defmodule Pleroma.User.Fetcher do
       emoji: emojis,
       is_locked: is_locked,
       is_discoverable: is_discoverable,
+      is_indexable: is_indexable,
       invisible: invisible,
       avatar: normalize_image(data["icon"]),
       name: data["name"],

@@ -281,6 +281,7 @@ defmodule Pleroma.Web.MastodonAPI.AccountView do
       acct: user.nickname,
       display_name: display_name,
       locked: user.is_locked,
+      indexable: user.is_indexable,
       created_at: Utils.to_masto_date(user.inserted_at),
       followers_count: followers_count,
       following_count: following_count,

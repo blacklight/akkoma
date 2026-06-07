@@ -727,6 +727,12 @@ defmodule Pleroma.Web.ApiSpec.AccountOperation do
           description:
             "Discovery (listing, indexing) of this account by external services (search bots etc.) is allowed."
         },
+        indexable: %Schema{
+          allOf: [BooleanLike],
+          nullable: true,
+          description:
+            "Whether the user's posts can be included in search results. Controls the ActivityPub 'indexable' flag (FEP-5feb)."
+        },
         actor_type: ActorType,
         status_ttl_days: %Schema{
           type: :integer,

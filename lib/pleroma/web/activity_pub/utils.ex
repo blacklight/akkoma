@@ -111,7 +111,8 @@ defmodule Pleroma.Web.ActivityPub.Utils do
           # Further verbose definitions
           "htmlMfm" => "https://w3id.org/fep/c16b#htmlMfm",
           "sm" => "http://smithereen.software/ns#",
-          "nonAnonymous" => "sm:nonAnonymous"
+          "nonAnonymous" => "sm:nonAnonymous",
+          "indexable" => "http://joinmastodon.org/ns#indexable"
         }
       ]
     }
