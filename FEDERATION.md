@@ -10,6 +10,7 @@
 ## Supported FEPs
 
 - [FEP-67ff: FEDERATION](https://codeberg.org/fediverse/fep/src/branch/main/fep/67ff/fep-67ff.md)
+- [FEP-5feb: Search indexing consent signaling](https://codeberg.org/fediverse/fep/src/branch/main/fep/5feb/fep-5feb.md) (partial; see below)
 - [FEP-2c59: Discovery of a Webfinger address from an ActivityPub actor](https://codeberg.org/fediverse/fep/src/branch/main/fep/2c59/fep-2c59.md)
 - [FEP-dc88: Formatting Mathematics](https://codeberg.org/fediverse/fep/src/branch/main/fep/dc88/fep-dc88.md)
 - [FEP-f1d5: NodeInfo in Fediverse Software](https://codeberg.org/fediverse/fep/src/branch/main/fep/f1d5/fep-f1d5.md)
@@ -37,6 +38,14 @@ Depending on instance configuration the same may be true for GET requests.
 
 We set the optional extension term `htmlMfm: true` when using content type "text/x.misskeymarkdown".
 Incoming messages containing `htmlMfm: true` will not have their content re-parsed.
+
+### FEP-5feb: Search indexing consent signaling
+
+Akkoma federates the `indexable` flag on actor objects and respects it for incoming actors.
+When a remote actor sets `indexable` to `false`, their posts will not be added to the local
+search index and will be excluded from search results.
+The per-object `indexable` property described in the FEP is not yet evaluated;
+only the actor-level flag is considered.
 
 ## WebFinger
 

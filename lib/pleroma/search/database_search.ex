@@ -107,6 +107,7 @@ defmodule Pleroma.Search.DatabaseSearch do
     |> maybe_restrict_local(user)
     |> maybe_restrict_author(author)
     |> maybe_restrict_blocked(user)
+    |> restrict_non_indexable(author)
     |> Pagination.fetch_paginated(
       %{"offset" => offset, "limit" => limit, "skip_order" => index_type == :rum},
       :offset
@@ -124,6 +125,16 @@ defmodule Pleroma.Search.DatabaseSearch do
   end
 
   def maybe_restrict_blocked(query, _), do: query
+
+  defp restrict_non_indexable(query, %User{}), do: query
+
+  defp restrict_non_indexable(query, _) do
+    from([a] in query,
+      inner_join: u in User,
+      on: u.ap_id == a.actor,
+      where: u.is_indexable == true
+    )
+  end
 
   def restrict_public(q) do
     from([a, o] in q,

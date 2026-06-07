@@ -147,6 +147,7 @@ defmodule Pleroma.User do
     field(:fields, {:array, :map}, default: [])
     field(:raw_fields, {:array, :map}, default: [])
     field(:is_discoverable, :boolean, default: false)
+    field(:is_indexable, :boolean, default: true)
     field(:invisible, :boolean, default: false)
     field(:allow_following_move, :boolean, default: true)
     field(:actor_type, :string, default: "Person")
@@ -491,6 +492,7 @@ defmodule Pleroma.User do
         :fields,
         :following_count,
         :is_discoverable,
+        :is_indexable,
         :invisible,
         :actor_type,
         :also_known_as,
@@ -552,6 +554,7 @@ defmodule Pleroma.User do
         :raw_fields,
         :pleroma_settings_store,
         :is_discoverable,
+        :is_indexable,
         :actor_type,
         :disclose_client,
         :status_ttl_days,
