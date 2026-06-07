@@ -412,7 +412,8 @@ defmodule Pleroma.Web.ApiSpec.StatusOperation do
       security: [%{"oAuth" => ["read:statuses"]}],
       parameters: [id_param()],
       responses: %{
-        200 => Operation.response("Context", "application/json", context())
+        200 => Operation.response("Context", "application/json", context()),
+        404 => Operation.response("Not Found", "application/json", ApiError)
       }
     }
   end
@@ -636,10 +637,16 @@ defmodule Pleroma.Web.ApiSpec.StatusOperation do
           description:
             "The number of seconds the posted activity should expire in. When a posted activity expires it will be deleted from the server, and a delete request for it will be federated. This needs to be longer than an hour."
         },
-        quote_id: %Schema{
+        quoted_status_id: %Schema{
           nullable: true,
           type: :string,
           description: "Will quote a given status."
+        },
+        quote_id: %Schema{
+          deprecated: true,
+          nullable: true,
+          type: :string,
+          description: "Deprecated alias for quoted_status_id."
         }
       },
       example: %{

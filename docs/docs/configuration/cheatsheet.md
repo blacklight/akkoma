@@ -307,8 +307,11 @@ To add your own configuration for akkoma-fe, use it like this:
 config :pleroma, :frontend_configurations,
   pleroma_fe: %{
     theme: "pleroma-dark",
-    # ... see /priv/static/static/config.json for the available keys.
-},
+    backendCommitUrl: 'https://akkoma.dev/AkkomaGang/akkoma/commit/',
+    frontendCommitUrl: 'https://akkoma.dev/AkkomaGang/akkoma-fe/commit/',
+    # ... see all available keys at Akkoma-FE’s /static/config.json and
+    # https://akkoma.dev/AkkomaGang/akkoma-fe/src/commit/develop/src/boot/after_store.js :: setSettings
+  },
   masto_fe: %{
     showInstanceSpecificPanel: true
   }
@@ -368,7 +371,8 @@ Currently, the only option relates to mascots on masto-fe
 
 ### :manifest
 
-This section describes PWA manifest instance-specific values. Currently this option relate only for masto-fe.
+This section describes PWA manifest instance-specific values.
+Almost all PWA manifest keys can be overriden or added here, below some particularly relevant examples:
 
 * `icons`: Describe the icons of the app, this is a list of maps describing icons as
   detailed in its [spec](https://www.w3.org/TR/appmanifest/#imageresource-and-its-members).
@@ -855,25 +859,6 @@ config :logger, :ex_syslogger,
   format: "$metadata[$level] $message"
 ```
 
-## Database options
-
-### RUM indexing for full text search
-
-!!! warning
-    It is recommended to use PostgreSQL v11 or newer. We have seen some minor issues with lower PostgreSQL versions.
-
-* `rum_enabled`: If RUM indexes should be used. Defaults to `false`.
-
-RUM indexes are an alternative indexing scheme that is not included in PostgreSQL by default. While they may eventually be mainlined, for now they have to be installed as a PostgreSQL extension from https://github.com/postgrespro/rum.
-
-Their advantage over the standard GIN indexes is that they allow efficient ordering of search results by timestamp, which makes search queries a lot faster on larger servers, by one or two orders of magnitude. They take up around 3 times as much space as GIN indexes.
-
-To enable them, both the `rum_enabled` flag has to be set and the following special migration has to be run:
-
-`mix ecto.migrate --migrations-path priv/repo/optional_migrations/rum_indexing/`
-
-This will probably take a long time.
-
 ## Authentication
 
 ### :admin_token
@@ -1087,8 +1072,9 @@ Boolean, enables/disables in-database configuration. Read [transferring the conf
 
 List of valid configuration sections which are allowed to be configured from the
 database. Settings stored in the database before the whitelist is configured are
-still applied, so it is suggested to only use the whitelist on instances that
-have not migrated the config to the database.
+still applied. Consider running the `mix pleroma.config filter_whitelisted` task
+after updating the whitelist. Read [Remove non-whitelisted configs from the database](../administration/CLI_tasks/config.md#remove-non-whitelisted-configs-from-the-database)
+for more information.
 
 Example:
 ```elixir

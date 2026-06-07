@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 defmodule Mix.Tasks.Pleroma.Database do
-  alias Pleroma.Conversation
   alias Pleroma.Maintenance
   alias Pleroma.Object
   alias Pleroma.Repo
@@ -286,17 +285,12 @@ defmodule Mix.Tasks.Pleroma.Database do
     end
   end
 
-  def run(["bump_all_conversations"]) do
-    start_pleroma()
-    Conversation.bump_for_all_activities()
-  end
-
   def run(["update_users_following_followers_counts"]) do
     start_pleroma()
 
     Repo.transaction(
       fn ->
-        from(u in User, select: u)
+        from(u in User, select: u, where: u.local or u.is_active)
         |> Repo.stream()
         |> Stream.each(&User.update_follower_count/1)
         |> Stream.run()
@@ -603,7 +597,7 @@ defmodule Mix.Tasks.Pleroma.Database do
         Ecto.Adapters.SQL.query!(
           Pleroma.Repo,
           "CREATE OR REPLACE FUNCTION objects_fts_update() RETURNS trigger AS $$ BEGIN
-          new.fts_content := to_tsvector(new.data->>'content');
+          new.fts_content := to_tsvector(COALESCE(new.data->>'summary', '') || ' ' || (new.data->>'content'));
           RETURN new;
           END
           $$ LANGUAGE plpgsql",
@@ -618,7 +612,14 @@ defmodule Mix.Tasks.Pleroma.Database do
 
         Ecto.Adapters.SQL.query!(
           Pleroma.Repo,
-          "CREATE INDEX CONCURRENTLY objects_fts ON objects USING gin(to_tsvector('#{tsconfig}', data->>'content')); ",
+          """
+          CREATE INDEX CONCURRENTLY objects_fts ON objects USING gin(
+            to_tsvector(
+              '#{tsconfig}',
+              COALESCE(data->>'summary', '') || ' ' || (data->>'content')
+            )
+          );
+          """,
           [],
           timeout: :infinity
         )

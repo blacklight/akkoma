@@ -527,6 +527,26 @@ defmodule Pleroma.Web.CommonAPITest do
       assert source_content == "<p class='scrub-this'>$[spin 13:37]</p>"
     end
 
+    test "it does not allow HTML injection via MFM attributes" do
+      user = insert(:user, local: true)
+
+      {:ok, %Pleroma.Activity{object: %Pleroma.Object{} = object}} =
+        CommonAPI.post(user, %{
+          status: "$[twitch.speed=5s\"><script>alert(1);</script><span>\" boo!]",
+          content_type: "text/x.misskeymarkdown"
+        })
+
+      refute object.data["content"] =~ "<script>"
+      refute object.data["content"] =~ "</script>"
+
+      {:ok, fhtml} = Floki.parse_document(object.data["content"])
+      assert Floki.find(fhtml, "script") == []
+
+      # the exact output may change in the future, but when updating make sure it never turns into something fishy
+      assert object.data["content"] ==
+               "<p><span class=\"mfm-twitch\" data-mfm-speed=\"5s\">”&gt;&lt;script&gt;alert(1);&lt;/script&gt;&lt;span&gt;” boo!</span></p>"
+    end
+
     test "it returns error when status is empty and no attachments" do
       user = insert(:user)
 
@@ -1256,11 +1276,6 @@ defmodule Pleroma.Web.CommonAPITest do
     test "gets user by ap_id" do
       user = insert(:user)
       assert CommonAPI.get_user(user.ap_id) == user
-    end
-
-    test "gets user by guessed nickname" do
-      user = insert(:user, ap_id: "", nickname: "mario@mushroom.kingdom")
-      assert CommonAPI.get_user("https://mushroom.kingdom/users/mario") == user
     end
 
     test "fallback" do

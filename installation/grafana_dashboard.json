@@ -723,6 +723,8 @@
           },
           "displayName": "Run Queue",
           "mappings": [],
+          "max": 1.5,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -732,11 +734,11 @@
               },
               {
                 "color": "yellow",
-                "value": 15
+                "value": 0.2
               },
               {
                 "color": "red",
-                "value": 25
+                "value": 1
               }
             ]
           },
@@ -784,6 +786,12 @@
               {
                 "id": "displayName",
                 "value": "Memory"
+              },
+              {
+                "id": "min"
+              },
+              {
+                "id": "max"
               }
             ]
           },
@@ -836,7 +844,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(vm_memory_total_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
+          "expr": "increase(vm_memory_total_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -854,7 +862,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(vm_memory_total_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
+          "expr": "increase(vm_memory_total_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -882,7 +890,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(vm_total_run_queue_lengths_cpu_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__rate_interval])",
+          "expr": "increase(vm_total_run_queue_lengths_cpu_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -900,7 +908,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(vm_total_run_queue_lengths_cpu_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__rate_interval])",
+          "expr": "increase(vm_total_run_queue_lengths_cpu_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -928,7 +936,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(vm_total_run_queue_lengths_io_fsum_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__rate_interval])",
+          "expr": "increase(vm_total_run_queue_lengths_io_fsum_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -946,7 +954,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "rate(vm_total_run_queue_lengths_io_fsum_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__rate_interval])",
+          "expr": "increase(vm_total_run_queue_lengths_io_fsum_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -1974,6 +1982,7 @@
         "type": "prometheus",
         "uid": "${DATASOURCE}"
       },
+      "description": "Times are counted upon job completion/failure and may contain IO or network wait times.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2252,7 +2261,7 @@
         "type": "prometheus",
         "uid": "${DATASOURCE}"
       },
-      "description": "Jobs eligible for immediate execution, but not yet started. Most likely they’re held back because the queue is already saturated and there’s no free slot.",
+      "description": "Jobs eligible for immediate execution, but not yet started. Most likely they’re held back because the queue is already saturated and there’s no free slot.\nThis should be empty most of the time.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2312,7 +2321,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 7,
+        "w": 4,
         "x": 10,
         "y": 25
       },
@@ -2356,7 +2365,7 @@
         "type": "prometheus",
         "uid": "${DATASOURCE}"
       },
-      "description": "Jobs intentionally held back until a later start data",
+      "description": "Jobs, which previously failed and are waiting for the retry cooldown to elapse.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2416,8 +2425,112 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 7,
-        "x": 17,
+        "w": 5,
+        "x": 14,
+        "y": 25
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "akkoma_job_queue_retryable",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "legendFormat": "{{queue_name}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DATASOURCE}"
+          }
+        }
+      ],
+      "title": "Retryable Jobs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DATASOURCE}"
+      },
+      "description": "Jobs intentionally held back until a later start date (e.g. scheduled reminders etc).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.9,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 5,
+        "x": 19,
         "y": 25
       },
       "id": 30,
@@ -2681,7 +2794,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(vm_memory_total_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
+          "expr": "increase(vm_memory_total_psum{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -2698,7 +2811,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(vm_memory_total_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
+          "expr": "increase(vm_memory_total_pcount{instance=\"${INSTANCE}\", job=\"${SCRAPE_JOB}\"}[$__interval])",
           "fullMetaSearch": false,
           "hide": true,
           "includeNullMetadata": true,
@@ -3598,6 +3711,6 @@
   "timezone": "utc",
   "title": "Akkoma Dashboard",
   "uid": "edzowz85niznkc",
-  "version": 29,
+  "version": 56,
   "weekStart": ""
 }

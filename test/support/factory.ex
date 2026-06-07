@@ -47,7 +47,7 @@ defmodule Pleroma.Factory do
   def instance_factory(attrs \\ %{}) do
     %Pleroma.Instances.Instance{
       host: attrs[:domain] || "example.com",
-      nodeinfo: %{version: "2.0", openRegistrations: true},
+      nodeinfo: %{"version" => "2.0", "openRegistrations" => true},
       unreachable_since: nil
     }
     |> Map.merge(attrs)
@@ -80,6 +80,7 @@ defmodule Pleroma.Factory do
 
         %{
           ap_id: ap_id,
+          inbox: ap_id <> "/inbox",
           follower_address: ap_id <> "/followers",
           following_address: ap_id <> "/following",
           featured_address: ap_id <> "/collections/featured"
@@ -87,6 +88,7 @@ defmodule Pleroma.Factory do
       else
         %{
           ap_id: User.ap_id(user),
+          inbox: User.ap_id(user) <> "/inbox",
           follower_address: User.ap_followers(user),
           following_address: User.ap_following(user),
           featured_address: User.ap_featured_collection(user)
