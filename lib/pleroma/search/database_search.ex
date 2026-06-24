@@ -130,9 +130,11 @@ defmodule Pleroma.Search.DatabaseSearch do
 
   defp restrict_non_indexable(query, _) do
     from([a] in query,
-      inner_join: u in User,
-      on: u.ap_id == a.actor,
-      where: u.is_indexable == true
+      where:
+        fragment(
+          "NOT EXISTS (SELECT 1 FROM users u WHERE u.ap_id = ? AND u.is_indexable = false)",
+          a.actor
+        )
     )
   end
 
