@@ -13,6 +13,19 @@ The value can be configured with:
 config :pleroma, Pleroma.Search, task_timeout: 51_610
 ```
 
+Remote URL resolution during search has its own timeout. This applies when a search
+query is a URL and `resolve` is enabled, allowing Akkoma to fetch the remote object
+directly instead of only searching already-indexed posts. Browser-style fediverse
+URLs may require additional ActivityPub resolution before they map to their canonical
+object ID, so this can take longer than a normal search index query.
+
+If the remote fetch exceeds this limit, Akkoma keeps the search response alive and
+returns indexed results without the direct remote fetch result.
+
+```elixir
+config :pleroma, Pleroma.Search, fetch_timeout: 15_000
+```
+
 ## Search providers
 ### Built-in search
 
