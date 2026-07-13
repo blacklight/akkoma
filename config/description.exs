@@ -3384,6 +3384,12 @@ config :pleroma, :config_description, [
         type: :integer,
         description: "Timeout for individual search tasks.",
         suggestions: [45_000]
+      },
+      %{
+        key: :fetch_timeout,
+        type: :integer,
+        description: "Timeout for resolving remote URLs into fetched activities during search.",
+        suggestions: [5_000]
       }
     ]
   },

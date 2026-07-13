@@ -911,7 +911,9 @@ config :pleroma, Pleroma.Web.WebFinger,
 config :pleroma, Pleroma.Search,
   module: Pleroma.Search.DatabaseSearch,
   # note this + pre- & postprocessing needs to fit into Phoenix/Cowboy’s timeout too (default: 60s)
-  task_timeout: 45_000
+  task_timeout: 45_000,
+  # timeout for resolving remote URLs into fetched activities during search
+  fetch_timeout: 5_000
 
 config :pleroma, Pleroma.Search.DatabaseSearch, gin_fuzzy_search_limit: nil
 
