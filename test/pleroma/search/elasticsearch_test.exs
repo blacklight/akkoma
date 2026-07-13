@@ -117,5 +117,32 @@ defmodule Pleroma.Search.ElasticsearchTest do
 
       assert_called(Pleroma.Search.Elasticsearch.remove_from_index(:_))
     end
+
+    test "remote URL resolution gracefully handles fetch timeout" do
+      clear_config([:http, :receive_timeout], 1)
+
+      query = "https://example.com/@alice/123"
+
+      with_mocks([
+        {Pleroma.Search.Elasticsearch.Store, [],
+         [
+           search: fn :activities, _query -> [] end
+         ]},
+        {Pleroma.Object.Fetcher, [],
+         [
+           fetch_object_from_id: fn ^query ->
+             Process.sleep(50)
+             {:error, :timeout}
+           end
+         ]}
+      ]) do
+        assert [] =
+                 Pleroma.Search.Elasticsearch.search(nil, query,
+                   resolve: true,
+                   limit: 20,
+                   offset: 0
+                 )
+      end
+    end
   end
 end
