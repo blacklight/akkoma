@@ -152,6 +152,7 @@ defmodule Pleroma.User do
     field(:allow_following_move, :boolean, default: true)
     field(:actor_type, :string, default: "Person")
     field(:also_known_as, {:array, ObjectValidators.ObjectID}, default: [])
+    field(:outbox, :string)
     field(:inbox, :string)
     field(:shared_inbox, :string)
     field(:last_active_at, :naive_datetime)
@@ -403,21 +404,25 @@ defmodule Pleroma.User do
   def image_description(_, default), do: default
 
   # Should probably be renamed or removed
-  @spec ap_id(User.t()) :: String.t()
-  def ap_id(%User{nickname: nickname}), do: "#{Endpoint.url()}/users/#{nickname}"
+  @spec generate_ap_id(%{id: String.t()}) :: String.t()
+  def generate_ap_id(%{nickname: nickname}) when nickname != nil,
+    do: "#{Endpoint.url()}/users/#{nickname}"
 
-  @spec ap_followers(User.t()) :: String.t()
-  def ap_followers(%User{follower_address: fa}) when is_binary(fa), do: fa
-  def ap_followers(%User{} = user), do: "#{ap_id(user)}/followers"
+  @spec generate_ap_inbox(%{ap_id: String.t()}) :: String.t()
+  def generate_ap_inbox(%{ap_id: ap_id}) when ap_id != nil, do: "#{ap_id}/inbox"
 
-  @spec ap_following(User.t()) :: String.t()
-  def ap_following(%User{following_address: fa}) when is_binary(fa), do: fa
-  def ap_following(%User{} = user), do: "#{ap_id(user)}/following"
+  @spec generate_ap_outbox(%{ap_id: String.t()}) :: String.t()
+  def generate_ap_outbox(%{ap_id: ap_id}) when ap_id != nil, do: "#{ap_id}/outbox"
 
-  @spec ap_featured_collection(User.t()) :: String.t()
-  def ap_featured_collection(%User{featured_address: fa}) when is_binary(fa), do: fa
+  @spec generate_ap_followers(%{ap_id: String.t()}) :: String.t()
+  def generate_ap_followers(%{ap_id: ap_id}) when ap_id != nil, do: "#{ap_id}/followers"
 
-  def ap_featured_collection(%User{} = user), do: "#{ap_id(user)}/collections/featured"
+  @spec generate_ap_following(%{ap_id: String.t()}) :: String.t()
+  def generate_ap_following(%{ap_id: ap_id}) when ap_id != nil, do: "#{ap_id}/following"
+
+  @spec generate_ap_featured_collection(%{ap_id: String.t()}) :: String.t()
+  def generate_ap_featured_collection(%{ap_id: ap_id}) when ap_id != nil,
+    do: "#{ap_id}/collections/featured"
 
   defp truncate_fields_param(params) do
     if Map.has_key?(params, :fields) do
@@ -435,13 +440,6 @@ defmodule Pleroma.User do
       params
     end
   end
-
-  defp fix_follower_address(%{follower_address: _, following_address: _} = params), do: params
-
-  defp fix_follower_address(%{nickname: nickname} = params),
-    do: Map.put(params, :follower_address, ap_followers(%User{nickname: nickname}))
-
-  defp fix_follower_address(params), do: params
 
   def remote_user_changeset(struct \\ %User{local: false}, params) do
     bio_limit = Config.get([:instance, :user_bio_length], 5000)
@@ -462,7 +460,6 @@ defmodule Pleroma.User do
       |> truncate_if_exists(:bio, bio_limit)
       |> Map.update(:fields, [], &Enum.take(&1, fields_limit))
       |> truncate_fields_param()
-      |> fix_follower_address()
 
     struct
     |> Repo.preload(:signing_key)
@@ -472,6 +469,7 @@ defmodule Pleroma.User do
         :bio,
         :emoji,
         :ap_id,
+        :outbox,
         :inbox,
         :shared_inbox,
         :nickname,
@@ -535,6 +533,7 @@ defmodule Pleroma.User do
         :name,
         :emoji,
         :avatar,
+        :outbox,
         :inbox,
         :shared_inbox,
         :is_locked,
@@ -799,6 +798,7 @@ defmodule Pleroma.User do
     |> validate_format(:nickname, local_nickname_regex())
     |> put_ap_id()
     |> unique_constraint(:ap_id)
+    |> put_in_and_outbox()
     |> put_following_and_follower_and_featured_address()
     |> put_private_key()
   end
@@ -861,6 +861,7 @@ defmodule Pleroma.User do
     |> put_password_hash
     |> put_ap_id()
     |> unique_constraint(:ap_id)
+    |> put_in_and_outbox()
     |> put_following_and_follower_and_featured_address()
     |> put_private_key()
   end
@@ -875,16 +876,29 @@ defmodule Pleroma.User do
     end
   end
 
-  def put_ap_id(changeset) do
-    ap_id = ap_id(%User{nickname: get_field(changeset, :nickname)})
-    put_change(changeset, :ap_id, ap_id)
+  defp put_ap_id(%{valid?: true, changes: initdata} = changeset) do
+    put_change(changeset, :ap_id, generate_ap_id(initdata))
   end
 
-  def put_following_and_follower_and_featured_address(changeset) do
-    user = %User{nickname: get_field(changeset, :nickname)}
-    followers = ap_followers(user)
-    following = ap_following(user)
-    featured = ap_featured_collection(user)
+  defp put_ap_id(%{valid?: false} = changeset), do: changeset
+
+  defp put_in_and_outbox(%{valid?: true, changes: initdata} = changeset) do
+    inbox = generate_ap_inbox(initdata)
+    outbox = generate_ap_inbox(initdata)
+
+    changeset
+    |> put_change(:inbox, inbox)
+    |> put_change(:outbox, outbox)
+  end
+
+  defp put_in_and_outbox(%{valid?: false} = changeset), do: changeset
+
+  defp put_following_and_follower_and_featured_address(
+         %{valid?: true, changes: initdata} = changeset
+       ) do
+    followers = generate_ap_followers(initdata)
+    following = generate_ap_following(initdata)
+    featured = generate_ap_featured_collection(initdata)
 
     changeset
     |> put_change(:follower_address, followers)
@@ -892,12 +906,17 @@ defmodule Pleroma.User do
     |> put_change(:featured_address, featured)
   end
 
-  defp put_private_key(changeset) do
+  defp put_following_and_follower_and_featured_address(%{valid?: false} = changeset),
+    do: changeset
+
+  defp put_private_key(%{valid?: true} = changeset) do
     ap_id = get_field(changeset, :ap_id)
 
     changeset
     |> put_assoc(:signing_key, SigningKey.generate_local_keys(ap_id))
   end
+
+  defp put_private_key(%{valid?: false} = changeset), do: changeset
 
   defp autofollow_users(user) do
     candidates = Config.get([:instance, :autofollowed_nicknames])

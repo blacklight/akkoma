@@ -76,7 +76,7 @@ defmodule Pleroma.Factory do
       if attrs[:local] == false do
         base_domain = attrs[:domain] || Enum.random(["domain1.com", "domain2.com", "domain3.com"])
 
-        ap_id = "https://#{base_domain}/users/#{user.nickname}"
+        ap_id = attrs[:ap_id] || "https://#{base_domain}/users/#{user.nickname}"
 
         %{
           ap_id: ap_id,
@@ -86,12 +86,16 @@ defmodule Pleroma.Factory do
           featured_address: ap_id <> "/collections/featured"
         }
       else
+        ap_id = User.generate_ap_id(user)
+        user = Map.put(user, :ap_id, ap_id)
+
         %{
-          ap_id: User.ap_id(user),
-          inbox: User.ap_id(user) <> "/inbox",
-          follower_address: User.ap_followers(user),
-          following_address: User.ap_following(user),
-          featured_address: User.ap_featured_collection(user)
+          ap_id: ap_id,
+          inbox: User.generate_ap_inbox(user),
+          outbox: User.generate_ap_outbox(user),
+          follower_address: User.generate_ap_followers(user),
+          following_address: User.generate_ap_following(user),
+          featured_address: User.generate_ap_featured_collection(user)
         }
       end
 
