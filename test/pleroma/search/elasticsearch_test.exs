@@ -118,8 +118,8 @@ defmodule Pleroma.Search.ElasticsearchTest do
       assert_called(Pleroma.Search.Elasticsearch.remove_from_index(:_))
     end
 
-    test "remote URL resolution uses the configured fetch timeout" do
-      clear_config([Pleroma.Search, :fetch_timeout], 1)
+    test "remote URL resolution gracefully handles fetch timeout" do
+      clear_config([:http, :receive_timeout], 1)
 
       query = "https://example.com/@alice/123"
 
