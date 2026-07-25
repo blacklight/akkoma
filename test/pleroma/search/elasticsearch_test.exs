@@ -119,9 +119,11 @@ defmodule Pleroma.Search.ElasticsearchTest do
     end
 
     test "remote URL resolution gracefully handles fetch timeout" do
-      clear_config([:http, :receive_timeout], 1)
+      clear_config([:http, :receive_timeout], 100)
 
       query = "https://example.com/@alice/123"
+      slow_activity = insert(:note_activity, local: false)
+      %Pleroma.Object{} = slow_obj = Pleroma.Object.get_by_ap_id(slow_activity.data["object"])
 
       with_mocks([
         {Pleroma.Search.Elasticsearch.Store, [],
@@ -131,8 +133,8 @@ defmodule Pleroma.Search.ElasticsearchTest do
         {Pleroma.Object.Fetcher, [],
          [
            fetch_object_from_id: fn ^query ->
-             Process.sleep(50)
-             {:error, :timeout}
+             Process.sleep(20_000)
+             {:ok, slow_obj}
            end
          ]}
       ]) do

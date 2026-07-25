@@ -45,9 +45,10 @@ defmodule Pleroma.Search.Elasticsearch do
   end
 
   defp await_fetch_task(task) do
-    timeout = Pleroma.Config.get([:http, :receive_timeout], :timer.seconds(15))
+    # Multiplier for following redirect and id mismatch refetch (without redirect)
+    timeout = 3 * Pleroma.Config.get!([:http, :receive_timeout])
 
-    case Task.yield(task, timeout) || Task.shutdown(task) do
+    case Task.yield(task, timeout) || Task.shutdown(task, 250) do
       {:ok, result} ->
         result
 
