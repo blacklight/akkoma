@@ -2543,7 +2543,9 @@ defmodule Pleroma.User do
     fields =
       fields
       |> Enum.with_index()
-      |> Enum.map(fn {%{"name" => name, "value" => value}, index} ->
+      |> Enum.map(fn {field, index} ->
+        %{"name" => name, "value" => value} = field
+
         raw_value =
           if is_nil(raw_fields) do
             nil
@@ -2551,38 +2553,66 @@ defmodule Pleroma.User do
             Enum.at(raw_fields, index)["value"]
           end
 
-        if is_url(raw_value) do
-          frontend_url = url(~p[/#{nickname}])
+        cond do
+          is_url(raw_value) ->
+            frontend_url = url(~p[/#{nickname}])
 
-          possible_urls = [ap_id, frontend_url]
+            possible_urls = [ap_id, frontend_url]
 
-          with "me" <- RelMe.maybe_put_rel_me(raw_value, possible_urls) do
-            %{
-              "name" => name,
-              "value" => value,
-              "verified_at" => DateTime.to_iso8601(DateTime.utc_now())
-            }
-          else
-            e ->
-              Logger.error("Could not check for rel=me, #{inspect(e)}")
-              %{"name" => name, "value" => value}
-          end
-        else
-          %{"name" => name, "value" => value}
+            with "me" <- RelMe.maybe_put_rel_me(raw_value, possible_urls) do
+              %{
+                "name" => name,
+                "value" => add_rel_me(value),
+                "verified_at" => DateTime.to_iso8601(DateTime.utc_now())
+              }
+            else
+              e ->
+                Logger.error("Could not check for rel=me, #{inspect(e)}")
+                %{"name" => name, "value" => value}
+            end
+
+          is_nil(raw_fields) ->
+            # Remote users: trust the source's verified_at; do not re-verify or strip it.
+            field
+
+          true ->
+            %{"name" => name, "value" => value}
         end
       end)
 
     put_change(changeset, :fields, fields)
   end
 
-  defp truncate_field(%{"name" => name, "value" => value}) do
+  defp add_rel_me(html) do
+    Regex.replace(
+      ~r/<a\s+([^>]*?)>/,
+      html,
+      fn _full, attrs ->
+        rel_pattern = ~r/rel="([^"]*)"/
+
+        new_attrs =
+          if Regex.match?(rel_pattern, attrs) do
+            Regex.replace(rel_pattern, attrs, fn full_rel, rel ->
+              if "me" in String.split(rel), do: full_rel, else: "rel=\"me " <> rel <> "\""
+            end)
+          else
+            String.trim(attrs) <> " rel=\"me\""
+          end
+
+        "<a " <> new_attrs <> ">"
+      end,
+      global: false
+    )
+  end
+
+  defp truncate_field(%{"name" => name, "value" => value} = field) do
     {name, _chopped} =
       String.split_at(name, Config.get([:instance, :account_field_name_length], 255))
 
     {value, _chopped} =
       String.split_at(value, Config.get([:instance, :account_field_value_length], 255))
 
-    %{"name" => name, "value" => value}
+    Map.merge(%{"name" => name, "value" => value}, Map.take(field, ["verified_at"]))
   end
 
   def admin_api_update(user, params) do

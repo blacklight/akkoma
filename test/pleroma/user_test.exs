@@ -1011,6 +1011,24 @@ defmodule Pleroma.UserTest do
       assert [%{"name" => "One", "value" => "Uno"}, %{"name" => "Two", "value" => "Dos"}] ==
                Ecto.Changeset.get_field(cs, :fields)
     end
+
+    test "it preserves verified_at on remote fields" do
+      verified_at = "2019-08-29T04:14:55.571+00:00"
+
+      fields = [
+        %{
+          "name" => "Website",
+          "value" => "https://example.com",
+          "verified_at" => verified_at,
+          "type" => "PropertyValue"
+        }
+      ]
+
+      cs = User.remote_user_changeset(@valid_remote |> Map.put(:fields, fields))
+
+      assert [%{"name" => "Website", "value" => "https://example.com", "verified_at" => ^verified_at}] =
+               Ecto.Changeset.get_field(cs, :fields)
+    end
   end
 
   describe "followers and friends" do

@@ -36,9 +36,12 @@ defmodule Pleroma.Web.RelMe do
   end
 
   def maybe_put_rel_me("http" <> _ = target_page, profile_urls) when is_list(profile_urls) do
+    normalized_profile_urls = Enum.map(profile_urls, &normalize_url/1)
+
     with {:parse, {:ok, rel_me_hrefs}} <- {:parse, parse(target_page)},
          {:link_match, true} <-
-           {:link_match, Enum.any?(rel_me_hrefs, fn x -> x in profile_urls end)} do
+           {:link_match,
+            Enum.any?(rel_me_hrefs, fn x -> normalize_url(x) in normalized_profile_urls end)} do
       "me"
     else
       e -> {:error, {:could_not_verify, target_page, e}}
@@ -50,4 +53,25 @@ defmodule Pleroma.Web.RelMe do
   def maybe_put_rel_me(_, _) do
     {:error, :invalid_url}
   end
+
+  defp normalize_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} = uri when is_binary(scheme) and is_binary(host) ->
+        path = if uri.path == "/", do: "", else: String.trim_trailing(uri.path || "", "/")
+
+        %URI{
+          uri
+          | scheme: String.downcase(scheme),
+            host: String.downcase(host),
+            path: path,
+            fragment: nil
+        }
+        |> URI.to_string()
+
+      _ ->
+        url
+    end
+  end
+
+  defp normalize_url(url), do: url
 end

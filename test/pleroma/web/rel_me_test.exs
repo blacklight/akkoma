@@ -44,4 +44,18 @@ defmodule Pleroma.Web.RelMeTest do
     assert Pleroma.Web.RelMe.maybe_put_rel_me("http://example.com/rel_me/link", profile_urls) ==
              attr
   end
+
+  test "maybe_put_rel_me/2 normalizes URLs" do
+    # The fixture returns https://social.example.org/users/lain (no trailing slash).
+    # These profile URLs should still verify thanks to normalization.
+    assert Pleroma.Web.RelMe.maybe_put_rel_me(
+             "http://example.com/rel_me/anchor",
+             ["https://social.example.org/users/lain/"]
+           ) == "me"
+
+    assert Pleroma.Web.RelMe.maybe_put_rel_me(
+             "http://example.com/rel_me/anchor",
+             ["https://SOCIAL.example.org/users/lain"]
+           ) == "me"
+  end
 end

@@ -297,7 +297,7 @@ defmodule Pleroma.Web.MastodonAPI.AccountView do
       header_static: header_static,
       header_description: header_description,
       emojis: emojis,
-      fields: user.fields,
+      fields: Enum.map(user.fields, &Map.put_new(&1, "verified_at", nil)),
       bot: bot,
       source: %{
         note: user.raw_bio || "",
